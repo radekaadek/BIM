@@ -1,6 +1,8 @@
 import ifcopenshell
 import ifcopenshell.util.element
 import ifcopenshell.geom
+from datetime import datetime
+from meteostat import Point, Daily
 
 settings = ifcopenshell.geom.settings()
 # settings.set(settings.USE_PYTHON_OPENCASCADE, False)  # Nie używamy pythonOCC
@@ -83,8 +85,24 @@ def compute_surface_area(verts, faces):
         area += triangle_area(v0, v1, v2)
     return area
 
+def dms_to_decimal(dms):
+    deg, minutes, seconds, micro = dms
+    # konwersja milisekund na sekundy
+    sec = seconds + micro / 1e6
+    return deg + minutes/60 + sec/3600
+
 # Główna funkcja
-def calculate_heat_loss_from_ifc(ifc_path, indoor_temp, outdoor_temp, ach=0.5):
+def calculate_heat_loss_from_ifc(ifc_path, indoor_temp, lat, lon, alt, data, ach=0.5):
+
+    location = Point(lat, lon, alt)
+    data = Daily(location, start=date, end=date)
+    df = data.fetch()
+    tavg = df['tavg'].iloc[0]   # Mean temperature (°C)
+    outdoor_temp = tavg
+    print(f"Temperature outside: {tavg:.1f} °C")
+    print(f"Indoor temperature: {indoor_temp:.1f} °C")
+
+
     model = ifcopenshell.open(ifc_path)
     spaces = model.by_type('IfcSpace')
     results = []
@@ -157,8 +175,12 @@ def calculate_heat_loss_from_ifc(ifc_path, indoor_temp, outdoor_temp, ach=0.5):
 
 if __name__ == '__main__':
     IFC_FILE = 'model.ifc'
-    T_IN, T_OUT, ACH = 20.0, 0.0, 0.5
-    data = calculate_heat_loss_from_ifc(IFC_FILE, T_IN, T_OUT, ACH)
+    T_IN, ACH = 20.0, 0.5
+    lat = 52
+    lon = 21
+    alt = 100
+    date = datetime(2025, 4, 29)                 # Example date
+    data = calculate_heat_loss_from_ifc(IFC_FILE, T_IN, lat, lon, alt, date, ACH)
     for r in data:
         print(f"Przestrzeń: {r['space_name']}")
         print(f"  Kubatura: {r['volume_m3']:.1f} m3")
