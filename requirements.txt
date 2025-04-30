@@ -1,4 +1,4 @@
 ifcopenshell
-meteosat
+meteostat
 numpy
 pandas
