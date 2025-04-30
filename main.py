@@ -62,6 +62,27 @@ def compute_volume(verts, faces):
                    - v0[0]*v2[1]*v1[2] - v1[0]*v0[1]*v2[2] - v2[0]*v1[1]*v0[2]) / 6.0
     return abs(volume)
 
+def compute_surface_area(verts, faces):
+    def triangle_area(v0, v1, v2):
+        import numpy as np
+        a = np.array(v0)
+        b = np.array(v1)
+        c = np.array(v2)
+        return 0.5 * np.linalg.norm(np.cross(b - a, c - a))
+
+    area = 0.0
+    for i in range(0, len(faces), 3):
+        idx0 = faces[i] * 3
+        idx1 = faces[i+1] * 3
+        idx2 = faces[i+2] * 3
+
+        v0 = verts[idx0:idx0+3]
+        v1 = verts[idx1:idx1+3]
+        v2 = verts[idx2:idx2+3]
+
+        area += triangle_area(v0, v1, v2)
+    return area
+
 # Główna funkcja
 def calculate_heat_loss_from_ifc(ifc_path, indoor_temp, outdoor_temp, ach=0.5):
     model = ifcopenshell.open(ifc_path)
@@ -80,55 +101,69 @@ def calculate_heat_loss_from_ifc(ifc_path, indoor_temp, outdoor_temp, ach=0.5):
         verts = shape.geometry.verts  # Lista współrzędnych w formacie [x1, y1, z1, x2, y2, z2, ...]
         faces = shape.geometry.faces  # Lista indeksów wierzchołków tworzących trójkąty
         volume = compute_volume(verts, faces)
-        print(f"Pomieszczenie '{space.Name}' ma objętość: {volume:.3f} jednostek³")
-
             
-    print(shapes)
-    #     vol = get_space_volume(space)
-    #     delta_t = indoor_temp - outdoor_temp
+        vol = volume
+        delta_t = indoor_temp - outdoor_temp
+
+        # graniczne elementy
+        rels = model.get_inverse(space, 'IfcRelSpaceBoundary')
+        u_vals, areas = [], []
+        for rel in rels:
+            # uwzględniamy tylko relacje IfcRelSpaceBoundary
+            if not rel.is_a('IfcRelSpaceBoundary'):
+                continue
+
+            # jeśli chcesz tylko fizyczne granice (ściany, okna, stropy):
+            pob = getattr(rel, 'PhysicalOrVirtualBoundary', None)
+            if pob is not None and pob.upper() != 'PHYSICAL':
+                continue
+
+            # teraz bezpiecznie możemy odwołać się do RelatingBuildingElement
+            elem = rel.RelatedBuildingElement
+            area = getattr(rel, 'CalculatedArea', 0.0)
+            if area <= 0:
+                area = (
+                    get_pset_value(elem, 'PSet_WallCommon',   'GrossArea') or
+                    get_pset_value(elem, 'PSet_WindowCommon', 'GrossArea')
+                )
+            if area <= 0 and elem.Representation:
+                try:
+                    shape_elem = ifcopenshell.geom.create_shape(settings, elem)
+                    area = compute_surface_area(
+                        shape_elem.geometry.verts,
+                        shape_elem.geometry.faces
+                    )
+                except Exception:
+                    area = 0.0
+
+            u = get_u_value(elem)
+            u_vals.append(u)
+            areas.append(area)
+
+        q_trans = transmission_heat_loss(u_vals, areas, delta_t)
+        q_vent = ventilation_heat_loss(ach, vol, delta_t)
+        q_total = q_trans + q_vent
+
+        results.append({
+            'space_name': space.Name or space.GlobalId,
+            'volume_m3': vol,
+            'surface_m2': sum(areas),
+            'Q_trans_W': q_trans,
+            'Q_vent_W': q_vent,
+            'Q_total_W': q_total
+        })
     #
-    #     # graniczne elementy
-    #     rels = model.get_inverse(space, 'IfcRelSpaceBoundary')
-    #     u_vals, areas = [], []
-    #     for rel in rels:
-    #         if not rel.is_a('IfcRelSpaceBoundary'):
-    #             continue
-    #         if not getattr(rel, 'AccessBoundary', False) or getattr(rel, 'PhysicalOrVirtualBoundary', '').upper() != 'PHYSICAL':
-    #             continue
-    #         elem = rel.RelatingBuildingElement
-    #         # obszar granicy
-    #         area = getattr(rel, 'CalculatedArea', 0.0)
-    #         if area <= 0:
-    #             # spróbuj z PSet_WallCommon lub PSet_WindowCommon
-    #             area = get_pset_value(elem, 'PSet_WallCommon', 'GrossArea') or get_pset_value(elem, 'PSet_WindowCommon', 'GrossArea')
-    #         u = get_u_value(elem)
-    #         u_vals.append(u)
-    #         areas.append(area)
-    #
-    #     q_trans = transmission_heat_loss(u_vals, areas, delta_t)
-    #     q_vent = ventilation_heat_loss(ach, vol, delta_t)
-    #     q_total = q_trans + q_vent
-    #
-    #     results.append({
-    #         'space_name': space.Name or space.GlobalId,
-    #         'volume_m3': vol,
-    #         'surface_m2': sum(areas),
-    #         'Q_trans_W': q_trans,
-    #         'Q_vent_W': q_vent,
-    #         'Q_total_W': q_total
-    #     })
-    #
-    # return results
+    return results
 
 if __name__ == '__main__':
     IFC_FILE = 'model.ifc'
     T_IN, T_OUT, ACH = 20.0, 0.0, 0.5
     data = calculate_heat_loss_from_ifc(IFC_FILE, T_IN, T_OUT, ACH)
-    # for r in data:
-    #     print(f"Przestrzeń: {r['space_name']}")
-    #     print(f"  Kubatura: {r['volume_m3']:.1f} m3")
-    #     print(f"  Pow. przegród: {r['surface_m2']:.1f} m2")
-    #     print(f"  Straty transmisyjne: {r['Q_trans_W']:.2f} W")
-    #     print(f"  Straty wentylacyjne: {r['Q_vent_W']:.2f} W")
-    #     print(f"  Moc całkowita: {r['Q_total_W']:.2f} W\n")
+    for r in data:
+        print(f"Przestrzeń: {r['space_name']}")
+        print(f"  Kubatura: {r['volume_m3']:.1f} m3")
+        print(f"  Pow. przegród: {r['surface_m2']:.1f} m2")
+        print(f"  Straty transmisyjne: {r['Q_trans_W']:.2f} W")
+        print(f"  Straty wentylacyjne: {r['Q_vent_W']:.2f} W")
+        print(f"  Moc całkowita: {r['Q_total_W']:.2f} W\n")
 
