@@ -1,6 +1,7 @@
 import ifcopenshell
 import ifcopenshell.util.element
 import ifcopenshell.geom
+import numpy as np
 from datetime import datetime
 from meteostat import Point, Daily
 
@@ -66,7 +67,6 @@ def compute_volume(verts, faces):
 
 def compute_surface_area(verts, faces):
     def triangle_area(v0, v1, v2):
-        import numpy as np
         a = np.array(v0)
         b = np.array(v1)
         c = np.array(v2)
@@ -84,12 +84,6 @@ def compute_surface_area(verts, faces):
 
         area += triangle_area(v0, v1, v2)
     return area
-
-def dms_to_decimal(dms):
-    deg, minutes, seconds, micro = dms
-    # konwersja milisekund na sekundy
-    sec = seconds + micro / 1e6
-    return deg + minutes/60 + sec/3600
 
 # Główna funkcja
 def calculate_heat_loss_from_ifc(ifc_path, indoor_temp, lat, lon, alt, data, ach=0.5):

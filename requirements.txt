@@ -1,2 +1,4 @@
 ifcopenshell
 meteosat
+numpy
+pandas
