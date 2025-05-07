@@ -372,7 +372,7 @@ def plot_yearly_temperatures(lat, lon, alt, year):
         plt.gcf().autofmt_xdate() 
 
         plt.title(f'Dzienne średnie temperatury dla lokalizacji ({lat:.2f}, {lon:.2f}) w roku {year}')
-        plt.xlabel('Data')
+        plt.xlabel('Miesiąc')
         plt.ylabel('Średnia temperatura (°C)')
         plt.grid(True)
         plt.legend()
