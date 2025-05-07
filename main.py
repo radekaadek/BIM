@@ -176,22 +176,34 @@ class BuildingModel:
                     continue
                 
                 area = 0.0
+                if hasattr(rel_sb, 'ConnectionGeometry') and rel_sb.ConnectionGeometry:
+                    # Attempt to get area from ConnectionGeometry if available and represents a surface
+                    # This is a more complex part, for now, we'll rely on CalculatedArea or PSet
+                    # For simplicity, we'll prioritize CalculatedArea and PSet values.
+                    # If you need more precise area from geometry, this part would need expansion.
+                    pass
+
                 if hasattr(rel_sb, 'CalculatedArea') and rel_sb.CalculatedArea is not None:
                     area = float(rel_sb.CalculatedArea)
                 
-                if area <= 0:
-                    area_psets = {
+                if area <= 0: # If CalculatedArea is not available or zero, try PSets
+                    # Try to get area from PSet of the related element
+                    # This is a simplified approach; specific PSets and properties might vary
+                    psets = ifcopenshell.util.element.get_psets(related_element)
+                    area_psets = { # More specific PSet names based on common practice
                         'PSet_WallCommon': 'GrossArea', 'PSet_WindowCommon': 'Area', 
                         'PSet_DoorCommon': 'Area', 'PSet_RoofCommon': 'GrossArea',
                         'PSet_SlabCommon': 'GrossArea'
+                        # Add other relevant Psets and properties for area
                     }
                     for pset_name, prop_name in area_psets.items():
                         elem_area = self._get_pset_value(related_element, pset_name, prop_name)
                         if elem_area > 0:
                             area = elem_area
-                            break 
+                            break # Found an area
                 
-                if area <= 0:
+                if area <= 0: # If still no area, skip this boundary element
+                    # print(f"Warning: Could not determine area for boundary {related_element.Name if related_element else 'N/A'} of space {space_name}")
                     continue 
 
                 u_value = self._get_u_value(related_element)
@@ -241,30 +253,29 @@ def calculate_total_heat_loss(building_model: BuildingModel, indoor_temp: float,
     delta_t = indoor_temp - outdoor_temp
 
     if delta_t <= 0:
-        # print(f"Indoor temperature ({indoor_temp}°C) is not higher than outdoor temperature ({outdoor_temp}°C). Heat loss is assumed to be zero.") # Original print
-        # More informative print for this case
         if indoor_temp < outdoor_temp:
-            print(f"Indoor temperature ({indoor_temp}°C) is lower than outdoor temperature ({outdoor_temp}°C). This indicates heat GAIN, not loss. Calculations will show negative loss (gain) or zero if capped.")
+            # print(f"Indoor temperature ({indoor_temp}°C) is lower than outdoor temperature ({outdoor_temp}°C). Heat GAIN occurs. Heat loss set to 0.")
+            pass # Silently handle, Q will be 0
         elif indoor_temp == outdoor_temp:
-            print(f"Indoor temperature ({indoor_temp}°C) is equal to outdoor temperature ({outdoor_temp}°C). No temperature difference, so heat loss is zero.")
-        # Proceed with calculation; delta_t will be <=0, leading to zero or negative (gain) heat loss values.
+            # print(f"Indoor temperature ({indoor_temp}°C) is equal to outdoor temperature ({outdoor_temp}°C). No temperature difference, heat loss is zero.")
+            pass # Silently handle, Q will be 0
         
-        for space_data in building_model.spaces_data: # Still provide structure if delta_t is 0
+        # Create results structure with 0 heat loss
+        for space_data in building_model.spaces_data:
             results.append({
                 'space_name': space_data['space_name'],
                 'volume_m3': space_data['volume_m3'],
                 'total_boundary_surface_m2': space_data['total_boundary_surface_m2'],
-                'Q_trans_W': 0.0, # Explicitly zero if no delta_t
-                'Q_vent_W': 0.0,  # Explicitly zero if no delta_t
-                'Q_total_W': 0.0, # Explicitly zero if no delta_t
+                'Q_trans_W': 0.0,
+                'Q_vent_W': 0.0,
+                'Q_total_W': 0.0,
                 'delta_t_K': delta_t
             })
-        # Add total building summary even if delta_t is zero
-        if results:
-             results.append({
+        if results: # Add total building summary
+            results.append({
                 'space_name': '--- TOTAL BUILDING ---',
-                'volume_m3': sum(s['volume_m3'] for s in building_model.spaces_data),
-                'total_boundary_surface_m2': sum(s['total_boundary_surface_m2'] for s in building_model.spaces_data),
+                'volume_m3': sum(s['volume_m3'] for s in building_model.spaces_data if 'volume_m3' in s),
+                'total_boundary_surface_m2': sum(s['total_boundary_surface_m2'] for s in building_model.spaces_data if 'total_boundary_surface_m2' in s),
                 'Q_trans_W': 0.0,
                 'Q_vent_W': 0.0,
                 'Q_total_W': 0.0,
@@ -298,8 +309,8 @@ def calculate_total_heat_loss(building_model: BuildingModel, indoor_temp: float,
     if results: 
         results.append({
             'space_name': '--- TOTAL BUILDING ---',
-            'volume_m3': sum(s['volume_m3'] for s in building_model.spaces_data),
-            'total_boundary_surface_m2': sum(s['total_boundary_surface_m2'] for s in building_model.spaces_data),
+            'volume_m3': sum(s['volume_m3'] for s in building_model.spaces_data if 'volume_m3' in s),
+            'total_boundary_surface_m2': sum(s['total_boundary_surface_m2'] for s in building_model.spaces_data if 'total_boundary_surface_m2' in s),
             'Q_trans_W': total_building_q_trans,
             'Q_vent_W': total_building_q_vent,
             'Q_total_W': total_building_q_total,
@@ -307,7 +318,7 @@ def calculate_total_heat_loss(building_model: BuildingModel, indoor_temp: float,
         })
     return results
 
-# --- Weather Data Function ---
+# --- Weather Data Function (single day, kept for potential other uses) ---
 def get_outdoor_temperature(lat, lon, alt, target_date):
     """
     Fetches the average outdoor temperature for a given location and date.
@@ -318,108 +329,142 @@ def get_outdoor_temperature(lat, lon, alt, target_date):
         df = data.fetch()
         if not df.empty and 'tavg' in df.columns and not np.isnan(df['tavg'].iloc[0]):
             tavg = df['tavg'].iloc[0]
-            print(f"Successfully fetched outdoor temperature for {target_date.strftime('%Y-%m-%d')}: {tavg:.1f} °C")
+            # print(f"Successfully fetched outdoor temperature for {target_date.strftime('%Y-%m-%d')}: {tavg:.1f} °C") # Less verbose
             return float(tavg)
         else:
-            print(f"Warning: Could not fetch valid outdoor temperature for {target_date.strftime('%Y-%m-%d')}. Using default 0°C.")
+            print(f"Warning: Could not fetch valid outdoor temperature for {target_date.strftime('%Y-%m-%d')}. Using default 0°C for this day.")
             return 0.0 
     except Exception as e:
-        print(f"Error fetching weather data for {target_date.strftime('%Y-%m-%d')}: {e}. Using default 0°C.")
+        print(f"Error fetching weather data for {target_date.strftime('%Y-%m-%d')}: {e}. Using default 0°C for this day.")
         return 0.0
 
-# --- Yearly Temperature Plot Function ---
-def plot_yearly_temperatures(lat, lon, alt, year):
+# --- Yearly Energy Consumption Plot Function ---
+def plot_yearly_energy_consumption(building_model: BuildingModel, lat: float, lon: float, alt: int, year: int, indoor_temp_celsius: float, ach: float):
     """
-    Fetches daily average temperatures for a given year and location,
-    and plots them using matplotlib. Saves the plot to a file.
-    
+    Fetches daily outdoor temperatures, calculates daily heat loss for the building,
+    converts it to energy consumption (kWh), and plots it for a given year.
+    Saves the plot to a file.
+
     Args:
+        building_model (BuildingModel): The preprocessed building model.
         lat (float): Latitude.
         lon (float): Longitude.
         alt (int): Altitude in meters.
-        year (int): The year for which to fetch and plot temperatures.
+        year (int): The year for which to calculate and plot energy consumption.
+        indoor_temp_celsius (float): The constant indoor temperature.
+        ach (float): Air changes per hour for ventilation loss.
     """
-    print(f"\nFetching daily temperatures for {year} at Lat: {lat}, Lon: {lon}...")
+    if not building_model or not building_model.spaces_data:
+        print("Cannot plot yearly energy consumption: Building model is not loaded or has no space data.")
+        return
+
+    print(f"\nFetching daily temperatures and calculating energy consumption for {year} at Lat: {lat}, Lon: {lon}...")
     start_date = datetime(year, 1, 1)
     end_date = datetime(year, 12, 31)
     location = Point(lat, lon, alt)
+
+    weather_data = Daily(location, start=start_date, end=end_date)
+    df_weather = weather_data.fetch()
+
+    if df_weather.empty or 'tavg' not in df_weather.columns:
+        print(f"No temperature data found for {year}.")
+        return
+
+    df_cleaned = df_weather.dropna(subset=['tavg'])
+    if df_cleaned.empty:
+        print(f"All temperature data for {year} was invalid (NaN). Cannot plot energy consumption.")
+        return
+
+    dates = []
+    daily_energy_kwh_list = []
     
-    # Get the current figure manager to check the backend, if needed for debugging
-    # current_backend = plt.get_backend()
-    # print(f"Matplotlib backend in use: {current_backend}")
-
-    try:
-        data = Daily(location, start=start_date, end=end_date)
-        df = data.fetch()
-
-        if df.empty or 'tavg' not in df.columns:
-            print(f"No temperature data found for {year}.")
-            return
-
-        df_cleaned = df.dropna(subset=['tavg'])
-        if df_cleaned.empty:
-            print(f"All temperature data for {year} was invalid (NaN). Cannot plot.")
-            return
-
-        dates = df_cleaned.index
-        temps = df_cleaned['tavg']
-
-        fig = plt.figure(figsize=(12, 6)) # Get a reference to the figure
-        plt.plot(dates, temps, label=f'Średnia temperatura dzienna (°C) w {year}')
+    print(f"Calculating daily energy consumption for {year} (Indoor Temp: {indoor_temp_celsius}°C, ACH: {ach})...")
+    for date_index, row in df_cleaned.iterrows():
+        outdoor_temp_celsius_today = row['tavg']
         
-        plt.gca().xaxis.set_major_formatter(mdates.DateFormatter('%b')) 
-        plt.gca().xaxis.set_major_locator(mdates.MonthLocator()) 
-        plt.gcf().autofmt_xdate() 
+        heat_loss_results_today = calculate_total_heat_loss(building_model, indoor_temp_celsius, outdoor_temp_celsius_today, ach)
+        
+        total_building_heat_loss_w = 0
+        if heat_loss_results_today:
+            for res in heat_loss_results_today:
+                if res['space_name'] == '--- TOTAL BUILDING ---':
+                    total_building_heat_loss_w = res['Q_total_W']
+                    break
+        
+        # Convert average power (Watts) over a day to energy (kWh)
+        # Energy (kWh) = Power (W) * hours / 1000
+        # Since Q_total_W is already an average power, we multiply by 24 hours
+        energy_kwh_today = (total_building_heat_loss_w * 24) / 1000.0
+        
+        # Ensure non-negative energy consumption (heating demand)
+        if energy_kwh_today < 0:
+            energy_kwh_today = 0
 
-        plt.title(f'Dzienne średnie temperatury dla lokalizacji ({lat:.2f}, {lon:.2f}) w roku {year}')
-        plt.xlabel('Miesiąc')
-        plt.ylabel('Średnia temperatura (°C)')
-        plt.grid(True)
-        plt.legend()
-        plt.tight_layout()
-        
-        # Save the plot to a file
-        plot_filename = f"yearly_temperatures_{year}.png"
-        plt.savefig(plot_filename)
-        print(f"Plot successfully saved as {plot_filename}")
-        
-        # Attempt to show the plot. This might still show a warning if the backend is non-interactive,
-        # but the plot has been saved.
-        print(f"Attempting to display plot for {year}...")
-        plt.show()
-        
-        # Close the figure to free up memory
-        plt.close(fig) # Use the figure reference
+        dates.append(date_index) # Use the DataFrame index which is a DatetimeIndex
+        daily_energy_kwh_list.append(energy_kwh_today)
 
-    except Exception as e:
-        print(f"Error generating temperature plot for {year}: {e}")
-        # Ensure the figure is closed even if an error occurs mid-plotting
-        if 'fig' in locals() and plt.fignum_exists(fig.number):
-            plt.close(fig)
+    if not daily_energy_kwh_list:
+        print("No energy consumption data could be calculated to plot.")
+        return
+
+    fig = plt.figure(figsize=(12, 6))
+    plt.plot(dates, daily_energy_kwh_list, label=f'Szacowane dzienne zużycie energii na ogrzewanie (kWh) w {year}', color='orangered')
+    
+    plt.gca().xaxis.set_major_formatter(mdates.DateFormatter('%b')) 
+    plt.gca().xaxis.set_major_locator(mdates.MonthLocator()) 
+    plt.gcf().autofmt_xdate() 
+
+    plt.title(f'Szacowane dzienne zużycie energii na ogrzewanie dla lokalizacji ({lat:.2f}, {lon:.2f}) w roku {year}\n(Temp. wewn.: {indoor_temp_celsius}°C, ACH: {ach})')
+    plt.xlabel('Miesiąc')
+    plt.ylabel('Dzienne zużycie energii na ogrzewanie (kWh)')
+    plt.grid(True, linestyle='--', alpha=0.7)
+    plt.legend()
+    plt.tight_layout()
+    
+    plot_filename = f"yearly_energy_consumption_{year}.png"
+    plt.savefig(plot_filename)
+    print(f"Wykres zużycia energii pomyślnie zapisany jako {plot_filename}")
 
 
 # --- Main Execution ---
 if __name__ == '__main__':
-    IFC_FILE_PATH = 'model.ifc' 
+    IFC_FILE_PATH = 'model.ifc' # Upewnij się, że ten plik istnieje lub podaj poprawną ścieżkę
     
-    LATITUDE = 52.2297  
-    LONGITUDE = 21.0122 
-    ALTITUDE = 110     
-    YEAR_FOR_PLOT = 2024 
-    DEFAULT_ACH = 0.5  
+    LATITUDE = 52.2297   # Warszawa
+    LONGITUDE = 21.0122  # Warszawa
+    ALTITUDE = 110       # Przybliżona wysokość dla Warszawy (w metrach)
+    YEAR_FOR_PLOT = 2023 # Rok do analizy
+    
+    DEFAULT_ACH = 0.5             # Wymiany powietrza na godzinę (Air Changes per Hour)
+    INDOOR_TEMPERATURE_CELSIUS = 20.0 # Stała temperatura wewnętrzna
 
-    print(f"Loading and preprocessing building model from: {IFC_FILE_PATH}")
+    print(f"Ładowanie i przetwarzanie modelu budynku z: {IFC_FILE_PATH}")
+    building = None # Initialize building to None
     try:
         building = BuildingModel(IFC_FILE_PATH)
+        if not building.spaces_data:
+            print("ERROR: Model IFC został załadowany, ale nie znaleziono lub nie przetworzono żadnych przestrzeni (IfcSpace) do analizy.")
+            print("Sprawdź model IFC lub logi preprocesora.")
+            building = None # Set to None if no spaces processed
     except FileNotFoundError:
-        print(f"ERROR: IFC file not found at '{IFC_FILE_PATH}'. Please check the path.")
-        building = None
+        print(f"BŁĄD KRYTYCZNY: Plik IFC nie znaleziony w '{IFC_FILE_PATH}'. Sprawdź ścieżkę.")
+        # building remains None
     except Exception as e:
-        print(f"Critical error loading IFC model: {e}")
-        building = None 
+        print(f"BŁĄD KRYTYCZNY podczas ładowania modelu IFC: {e}")
+        # building remains None
 
-    print(f"\n--- Generating Yearly Temperature Plot ---")
-    plot_yearly_temperatures(LATITUDE, LONGITUDE, ALTITUDE, YEAR_FOR_PLOT)
+    if building:
+        print(f"\n--- Generowanie wykresu rocznego zużycia energii ---")
+        plot_yearly_energy_consumption(
+            building_model=building,
+            lat=LATITUDE,
+            lon=LONGITUDE,
+            alt=ALTITUDE,
+            year=YEAR_FOR_PLOT,
+            indoor_temp_celsius=INDOOR_TEMPERATURE_CELSIUS,
+            ach=DEFAULT_ACH
+        )
+    else:
+        print("\nNie można wygenerować wykresu zużycia energii, ponieważ model budynku nie został pomyślnie załadowany lub przetworzony.")
     
-    print("\n--- Script Finished ---")
-
+    print("\n--- Skrypt zakończył działanie ---")
