@@ -1,13 +1,11 @@
 import ifcopenshell
 import ifcopenshell.util.element
 import ifcopenshell.geom
-import numpy as np
-import argparse
+import click
 from datetime import datetime, timedelta
 from meteostat import Point, Daily, Hourly
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
-import warnings
 
 # --- Constants ---
 DENSITY_AIR = 1.2  # kg/m3
@@ -203,34 +201,40 @@ def plot_daily_hourly(model, lat, lon, alt, target_date, indoor_temp, ach, outpu
     plt.savefig(output_file)
     print(f'Zapisano godzinowy wykres strat ciepła: {output_file}')
 
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='Oblicz i generuj wykresy strat ciepła')
-    parser.add_argument('--ifc', type=str, required=True, help='Ścieżka do pliku IFC')
-    parser.add_argument('--year', type=int, help='Rok do analizy rocznej')
-    parser.add_argument('--date', type=lambda s: datetime.strptime(s, '%Y-%m-%d'),
-                        help='Data do analizy dziennej (YYYY-MM-DD)')
-    parser.add_argument('--lat', type=float, default=52.2297, help='Szerokość geogr.')
-    parser.add_argument('--lon', type=float, default=21.0122, help='Długość geogr.')
-    parser.add_argument('--alt', type=int, default=110, help='Wysokość npm [m]')
-    parser.add_argument('--ach', type=float, default=0.5, help='Wymiany powietrza [ACH]')
-    parser.add_argument('--tmp', type=float, default=20.0, help='Temperatura wewnętrzna [°C]')
-    args = parser.parse_args()
-
-    building = BuildingModel(args.ifc)
+# --- CLI with Click ---
+@click.command()
+@click.option('--ifc', 'ifc_path', type=click.Path(exists=True), required=True, help='Ścieżka do pliku IFC')
+@click.option('--year', type=int, help='Rok do analizy rocznej')
+@click.option('--date', 'date_str', type=click.STRING, help='Data do analizy dziennej (YYYY-MM-DD)')
+@click.option('--lat', type=float, default=52.2297, help='Szerokość geogr.')
+@click.option('--lon', type=float, default=21.0122, help='Długość geogr.')
+@click.option('--alt', type=int, default=110, help='Wysokość npm [m]')
+@click.option('--ach', type=float, default=0.5, help='Wymiany powietrza [ACH]')
+@click.option('--tmp', 'indoor_temp', type=float, default=20.0, help='Temperatura wewnętrzna [°C]')
+def main(ifc_path, year, date_str, lat, lon, alt, ach, indoor_temp):
+    """Oblicz i generuj wykresy strat ciepła"""
+    building = BuildingModel(ifc_path)
     if not building.spaces_data:
-        print('Błąd: Nie przetworzono żadnych przestrzeni. Kończę.')
-        exit(1)
+        click.echo('Błąd: Nie przetworzono żadnych przestrzeni. Kończę.', err=True)
+        raise SystemExit(1)
 
-    if args.year:
-        output_year = f'roczne_zuzycie_{args.year}.png'
-        plot_yearly_energy(building, args.lat, args.lon, args.alt,
-                             args.year, args.tmp, args.ach, output_year)
+    if year:
+        output_year = f'roczne_zuzycie_{year}.png'
+        plot_yearly_energy(building, lat, lon, alt, year, indoor_temp, ach, output_year)
 
-    if args.date:
-        output_day = f'hourly_loss_{args.date.strftime("%Y-%m-%d")}.png'
-        plot_daily_hourly(building, args.lat, args.lon, args.alt,
-                             args.date, args.tmp, args.ach, output_day)
+    if date_str:
+        try:
+            target_date = datetime.strptime(date_str, '%Y-%m-%d')
+        except ValueError:
+            click.echo('Nieprawidłowy format daty. Użyj YYYY-MM-DD.', err=True)
+            raise SystemExit(1)
+        output_day = f'hourly_loss_{target_date.strftime("%Y-%m-%d")}.png'
+        plot_daily_hourly(building, lat, lon, alt, target_date, indoor_temp, ach, output_day)
 
-    if not args.year and not args.date:
-        print('Podaj przynajmniej --year lub --date aby wygenerować wykres.')
+    if not year and not date_str:
+        click.echo('Podaj przynajmniej --year lub --date aby wygenerować wykres.', err=True)
+        raise SystemExit(1)
+
+if __name__ == '__main__':
+    main()
 
