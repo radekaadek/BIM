@@ -405,8 +405,6 @@ if __name__ == '__main__':
     LATITUDE = 52.2297  
     LONGITUDE = 21.0122 
     ALTITUDE = 110     
-    
-    TARGET_HEAT_LOSS_DATE = datetime(2025, 1, 15) 
     YEAR_FOR_PLOT = 2024 
     DEFAULT_ACH = 0.5  
 
@@ -419,48 +417,6 @@ if __name__ == '__main__':
     except Exception as e:
         print(f"Critical error loading IFC model: {e}")
         building = None 
-
-    if building and building.spaces_data: 
-        print("\n--- Building Model Preprocessing Summary ---")
-        for space_info in building.spaces_data:
-            print(f"Space: {space_info['space_name']}, Volume: {space_info['volume_m3']:.2f} m³,"
-                  f" Boundaries: {len(space_info['boundaries'])}, Total Area: {space_info['total_boundary_surface_m2']:.2f} m²")
-        print("--- End of Preprocessing Summary ---\n")
-
-        print(f"\n--- Calculating Heat Loss for Scenario 1 (Date: {TARGET_HEAT_LOSS_DATE.strftime('%Y-%m-%d')}) ---")
-        T_INDOOR_SCENARIO_1 = 20.0  
-        T_OUTDOOR_SCENARIO_1 = get_outdoor_temperature(LATITUDE, LONGITUDE, ALTITUDE, TARGET_HEAT_LOSS_DATE)
-        
-        print(f"Parameters: Indoor Temp: {T_INDOOR_SCENARIO_1}°C, Outdoor Temp: {T_OUTDOOR_SCENARIO_1}°C, ACH: {DEFAULT_ACH}")
-        heat_loss_results_1 = calculate_total_heat_loss(building, T_INDOOR_SCENARIO_1, T_OUTDOOR_SCENARIO_1, DEFAULT_ACH)
-        
-        for r in heat_loss_results_1:
-            print(f"Space/Summary: {r['space_name']}")
-            if r['space_name'] != '--- TOTAL BUILDING ---': 
-                print(f"  Volume: {r['volume_m3']:.1f} m³")
-                print(f"  Total Boundary Surface: {r['total_boundary_surface_m2']:.1f} m²")
-            print(f"  Delta T: {r['delta_t_K']:.1f} K")
-            print(f"  Transmission Losses (Q_trans): {r['Q_trans_W']:.2f} W")
-            print(f"  Ventilation Losses (Q_vent): {r['Q_vent_W']:.2f} W")
-            print(f"  Total Heat Power (Q_total): {r['Q_total_W']:.2f} W\n")
-
-        print(f"\n--- Calculating Heat Loss for Scenario 2 (Date: {TARGET_HEAT_LOSS_DATE.strftime('%Y-%m-%d')}) ---")
-        T_INDOOR_SCENARIO_2 = 18.0   
-        print(f"Parameters: Indoor Temp: {T_INDOOR_SCENARIO_2}°C, Outdoor Temp: {T_OUTDOOR_SCENARIO_1}°C, ACH: {DEFAULT_ACH}")
-        heat_loss_results_2 = calculate_total_heat_loss(building, T_INDOOR_SCENARIO_2, T_OUTDOOR_SCENARIO_1, DEFAULT_ACH)
-        for r in heat_loss_results_2:
-            print(f"Space/Summary: {r['space_name']}")
-            print(f"  Total Heat Power (Q_total) for T_in={T_INDOOR_SCENARIO_2}°C: {r['Q_total_W']:.2f} W\n")
-
-        print(f"\n--- Calculating Heat Loss for Scenario 3 (Date: {TARGET_HEAT_LOSS_DATE.strftime('%Y-%m-%d')}) ---")
-        ACH_SCENARIO_3 = 1.0 
-        print(f"Parameters: Indoor Temp: {T_INDOOR_SCENARIO_1}°C, Outdoor Temp: {T_OUTDOOR_SCENARIO_1}°C, ACH: {ACH_SCENARIO_3}")
-        heat_loss_results_3 = calculate_total_heat_loss(building, T_INDOOR_SCENARIO_1, T_OUTDOOR_SCENARIO_1, ACH_SCENARIO_3)
-        for r in heat_loss_results_3:
-            print(f"Space/Summary: {r['space_name']}")
-            print(f"  Total Heat Power (Q_total) for ACH={ACH_SCENARIO_3}: {r['Q_total_W']:.2f} W\n")
-    else:
-        print("Could not proceed with heat loss calculation due to issues with the building model or lack of spaces.")
 
     print(f"\n--- Generating Yearly Temperature Plot ---")
     plot_yearly_temperatures(LATITUDE, LONGITUDE, ALTITUDE, YEAR_FOR_PLOT)
