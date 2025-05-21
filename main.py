@@ -204,13 +204,13 @@ def plot_daily_hourly(model, lat, lon, alt, target_date, indoor_temp, ach, outpu
 # --- CLI with Click ---
 @click.command()
 @click.option('--ifc', 'ifc_path', type=click.Path(exists=True), required=True, help='Ścieżka do pliku IFC')
-@click.option('--year', type=int, help='Rok do analizy rocznej')
+@click.option('--year', type=click.INT, help='Rok do analizy rocznej')
 @click.option('--date', 'date_str', type=click.STRING, help='Data do analizy dziennej (YYYY-MM-DD)')
-@click.option('--lat', type=float, default=52.2297, help='Szerokość geogr.')
-@click.option('--lon', type=float, default=21.0122, help='Długość geogr.')
-@click.option('--alt', type=int, default=110, help='Wysokość npm [m]')
-@click.option('--ach', type=float, default=0.5, help='Wymiany powietrza [ACH]')
-@click.option('--tmp', 'indoor_temp', type=float, default=20.0, help='Temperatura wewnętrzna [°C]')
+@click.option('--lat', type=click.FLOAT, default=52.2297, help='Szerokość geogr.')
+@click.option('--lon', type=click.FLOAT, default=21.0122, help='Długość geogr.')
+@click.option('--alt', type=click.INT, default=110, help='Wysokość npm [m]')
+@click.option('--ach', type=click.FLOAT, default=0.5, help='Wymiany powietrza [ACH]')
+@click.option('--tmp', 'indoor_temp', type=click.FLOAT, default=20.0, help='Temperatura wewnętrzna [°C]')
 def main(ifc_path, year, date_str, lat, lon, alt, ach, indoor_temp):
     """Oblicz i generuj wykresy strat ciepła"""
     building = BuildingModel(ifc_path)
