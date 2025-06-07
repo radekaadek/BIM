@@ -255,11 +255,10 @@ def calculate_total_cooling_load(
 
 
 # --- Plotting Functions ---
-def plot_yearly_energy(model, lat, lon, alt, year, indoor_temp, ach, output_file):
+def plot_yearly_energy_heating(model, lat, lon, alt, year, indoor_temp, ach, output_file):
     start = datetime(year, 1, 1)
     end = datetime(year, 12, 31)
     loc = Point(lat, lon, alt)
-    # Only fetch tavg from Daily data
     df = Daily(loc, start=start, end=end).fetch().dropna(subset=['tavg'])
 
     dates, energy = [], []
@@ -273,17 +272,17 @@ def plot_yearly_energy(model, lat, lon, alt, year, indoor_temp, ach, output_file
     plt.plot(dates, energy)
     plt.gca().xaxis.set_major_formatter(mdates.DateFormatter('%b'))
     plt.gca().xaxis.set_major_locator(mdates.MonthLocator())
-    plt.title(f'Roczne zużycie energii {year} (wew.:{indoor_temp}°C, ACH:{ach})')
+    plt.title(f'Roczne zapotrzebowanie mocy na ogrzewanie {year} (wew.:{indoor_temp}°C, ACH:{ach})')
     plt.xlabel('Miesiąc')
     plt.ylabel('kWh/dzień')
     plt.grid(True, linestyle='--', alpha=0.7)
     plt.tight_layout()
     plt.savefig(output_file)
     plt.close()
-    return f'Zapisano wykres rocznego zużycia: {output_file}'
+    return f'Zapisano wykres rocznego zapotrzebowania na ogrzewanie: {output_file}'
 
 
-def plot_daily_hourly(model, lat, lon, alt, target_date, indoor_temp, ach, output_file):
+def plot_daily_hourly_heating(model, lat, lon, alt, target_date, indoor_temp, ach, output_file):
     loc = Point(lat, lon, alt)
     start = datetime(target_date.year, target_date.month, target_date.day)
     end = start + timedelta(days=1)
@@ -302,7 +301,7 @@ def plot_daily_hourly(model, lat, lon, alt, target_date, indoor_temp, ach, outpu
         times.append(ts)
         losses.append(total)
 
-    if not times:  # Handle case where all rows were dropped due to missing temp
+    if not times:
         messagebox.showerror("Błąd danych",
                              f"Brak wystarczających danych do wygenerowania wykresu dla {target_date.strftime('%Y-%m-%d')}.")
         return None
@@ -311,14 +310,15 @@ def plot_daily_hourly(model, lat, lon, alt, target_date, indoor_temp, ach, outpu
     plt.plot(times, losses)
     plt.gca().xaxis.set_major_formatter(mdates.DateFormatter('%H:%M'))
     plt.gca().xaxis.set_major_locator(mdates.HourLocator(interval=2))
-    plt.title(f"Godzinowe straty ciepła {target_date.strftime('%Y-%m-%d')} (wew.:{indoor_temp}°C, ACH:{ach})")
+    plt.title(
+        f"Godzinowe zapotrzebowanie mocy na ogrzewanie {target_date.strftime('%Y-%m-%d')} (wew.:{indoor_temp}°C, ACH:{ach})")
     plt.xlabel('Godzina')
-    plt.ylabel('Moc strat [W]')
+    plt.ylabel('Moc [W]')
     plt.grid(True, linestyle='--', alpha=0.7)
     plt.tight_layout()
     plt.savefig(output_file)
     plt.close()
-    return f'Zapisano godzinowy wykres strat ciepła: {output_file}'
+    return f'Zapisano godzinowy wykres zapotrzebowania na ogrzewanie: {output_file}'
 
 
 def plot_yearly_energy_cooling(model, lat, lon, alt, year, indoor_temp, ach,
@@ -326,16 +326,12 @@ def plot_yearly_energy_cooling(model, lat, lon, alt, year, indoor_temp, ach,
     start = datetime(year, 1, 1)
     end = datetime(year, 12, 31)
     loc = Point(lat, lon, alt)
-    # Fetch Daily data. Crucially, 'srad' is NOT available from Daily data.
-    # We will rely on the simplified 'average_solar_irradiance_w_m2' in calculate_total_cooling_load.
     df = Daily(loc, start=start, end=end).fetch().dropna(subset=['tavg'])
 
     dates, energy = [], []
     for date, row in df.iterrows():
         tm = row['tavg']
 
-        # Use a simplified/default solar gain for yearly cooling as Daily data doesn't provide granular solar.
-        # This constant value (e.g., 200 W/m2) is a placeholder for when outside temp is above indoor setpoint.
         solar_irradiance_for_cooling_yearly = 200 if tm > indoor_temp else 0
 
         res = calculate_total_cooling_load(
@@ -343,7 +339,7 @@ def plot_yearly_energy_cooling(model, lat, lon, alt, year, indoor_temp, ach,
             occupancy_count_per_space=occupancy_count_per_space,
             lighting_density_w_m2=lighting_density,
             equipment_density_w_m2=equipment_density,
-            average_solar_irradiance_w_m2=solar_irradiance_for_cooling_yearly  # Use the simplified value
+            average_solar_irradiance_w_m2=solar_irradiance_for_cooling_yearly
         )
         total = next(r['Q_total_W'] for r in res if r['space_name'] == '--- TOTAL BUILDING ---')
         dates.append(date)
@@ -353,14 +349,14 @@ def plot_yearly_energy_cooling(model, lat, lon, alt, year, indoor_temp, ach,
     plt.plot(dates, energy, color='red')
     plt.gca().xaxis.set_major_formatter(mdates.DateFormatter('%b'))
     plt.gca().xaxis.set_major_locator(mdates.MonthLocator())
-    plt.title(f'Roczne zużycie energii chłodniczej {year} (wew.:{indoor_temp}°C, ACH:{ach})')
+    plt.title(f'Roczne zapotrzebowanie mocy na chłodzenie {year} (wew.:{indoor_temp}°C, ACH:{ach})')
     plt.xlabel('Miesiąc')
     plt.ylabel('kWh/dzień')
     plt.grid(True, linestyle='--', alpha=0.7)
     plt.tight_layout()
     plt.savefig(output_file)
     plt.close()
-    return f'Zapisano wykres rocznego zużycia chłodniczego: {output_file}'
+    return f'Zapisano wykres rocznego zapotrzebowania na chłodzenie: {output_file}'
 
 
 def plot_daily_hourly_cooling(model, lat, lon, alt, target_date, indoor_temp, ach,
@@ -369,7 +365,6 @@ def plot_daily_hourly_cooling(model, lat, lon, alt, target_date, indoor_temp, ac
     start = datetime(target_date.year, target_date.month, target_date.day)
     end = start + timedelta(days=1)
 
-    # Fetch hourly data. Fill missing 'swsf' with 0 to prevent errors if data is incomplete.
     df = Hourly(loc, start=start, end=end).fetch()
 
     if df.empty:
@@ -377,13 +372,13 @@ def plot_daily_hourly_cooling(model, lat, lon, alt, target_date, indoor_temp, ac
                              f"Brak danych godzinowych dla daty {target_date.strftime('%Y-%m-%d')} i lokalizacji.")
         return None  # Indicate failure
 
-    df = df.dropna(subset=['temp'])  # Drop rows only if temperature is missing
-    df['swsf'] = df['swsf'].fillna(0)  # Fill missing solar flux (swsf) with 0
+    df = df.dropna(subset=['temp'])
+    df['swsf'] = df['swsf'].fillna(0)
 
     times, loads = [], []
     for ts, row in df.iterrows():
         tm = row['temp']
-        solar_irradiance_w_m2 = row['swsf']  # This should be available from Hourly data
+        solar_irradiance_w_m2 = row['swsf']
 
         res = calculate_total_cooling_load(
             model, indoor_temp, tm, ach,
@@ -396,7 +391,7 @@ def plot_daily_hourly_cooling(model, lat, lon, alt, target_date, indoor_temp, ac
         times.append(ts)
         loads.append(total)
 
-    if not times:  # Handle case where all relevant rows were dropped
+    if not times:
         messagebox.showerror("Błąd danych",
                              f"Brak wystarczających danych do wygenerowania wykresu dla {target_date.strftime('%Y-%m-%d')}.")
         return None
@@ -405,28 +400,26 @@ def plot_daily_hourly_cooling(model, lat, lon, alt, target_date, indoor_temp, ac
     plt.plot(times, loads, color='red')
     plt.gca().xaxis.set_major_formatter(mdates.DateFormatter('%H:%M'))
     plt.gca().xaxis.set_major_locator(mdates.HourLocator(interval=2))
-    plt.title(f"Godzinowe obciążenie chłodnicze {target_date.strftime('%Y-%m-%d')} (wew.:{indoor_temp}°C, ACH:{ach})")
+    plt.title(
+        f"Godzinowe zapotrzebowanie mocy na chłodzenie {target_date.strftime('%Y-%m-%d')} (wew.:{indoor_temp}°C, ACH:{ach})")
     plt.xlabel('Godzina')
-    plt.ylabel('Moc chłodnicza [W]')
+    plt.ylabel('Moc [W]')
     plt.grid(True, linestyle='--', alpha=0.7)
     plt.tight_layout()
     plt.savefig(output_file)
     plt.close()
-    return f'Zapisano godzinowy wykres obciążenia chłodniczego: {output_file}'
+    return f'Zapisano godzinowy wykres zapotrzebowania na chłodzenie: {output_file}'
 
 
 # --- GUI Application ---
 class HeatLossApp:
     def __init__(self, master):
         self.master = master
-        self.master.geometry("600x350")
-        self.master.resizable(False, False)
         master.title("Analiza Zapotrzebowania Energetycznego Budynku")
 
         # Set custom favicon
         try:
             script_dir = os.path.dirname(os.path.abspath(__file__))
-            # Prioritize .ico if available, otherwise try .png
             favicon_filename_ico = 'favicon.ico'
             favicon_filename_png = 'micon.png'
             icon_path_ico = os.path.join(script_dir, favicon_filename_ico)
@@ -444,7 +437,7 @@ class HeatLossApp:
                     photo_image = ImageTk.PhotoImage(resized_image)
                     photo_images.append(photo_image)
                 self.master.iconphoto(False, *photo_images)
-                self.master.icon_references = photo_images  # Keep a reference!
+                self.master.icon_references = photo_images
             else:
                 print(
                     f"Warning: No favicon file found (looked for {favicon_filename_ico} and {favicon_filename_png}). Using default icon.")
@@ -452,7 +445,7 @@ class HeatLossApp:
             print(f"Error setting favicon: {e}")
 
         self.ifc_path = tk.StringVar()
-        self.analysis_mode = tk.StringVar(value="Ogrzewanie")  # Default to Heating
+        self.analysis_mode = tk.StringVar(value="Ogrzewanie")
         self.analysis_period = tk.StringVar(value="Roczny")
         self.analysis_input_value = tk.StringVar()
         self.lat = tk.DoubleVar(value=52.2297)
@@ -466,54 +459,65 @@ class HeatLossApp:
         self.equipment_density_w_m2 = tk.DoubleVar(value=HEAT_GAIN_EQUIPMENT_DENSITY)
 
         self._create_widgets()
-        # Call initial update to set visibility based on default mode
-        self._on_analysis_option_change()
+        self._on_analysis_option_change()  # Call initial update to set visibility
+
+        self.master.update_idletasks()  # Force update to calculate minimum size
+        # Optional: Set a minimum window size, allow it to expand if content requires more
+        # min_width = self.master.winfo_reqwidth()
+        # min_height = self.master.winfo_reqheight()
+        # self.master.geometry(f"{max(600, min_width)}x{max(400, min_height)}")
+        self.master.geometry("600x400")  # Attempt to set, but pack() may override
 
     def _create_widgets(self):
-        input_frame = tk.Frame(self.master, padx=10, pady=10)
+        input_frame = tk.Frame(self.master, padx=5, pady=2)
         input_frame.pack(side=tk.TOP, fill=tk.X)
 
-        self._create_labeled_entry(input_frame, "Ścieżka do pliku IFC:", self.ifc_path, width=50, is_file_path=True,
+        self._create_labeled_entry(input_frame, "Ścieżka do pliku IFC:", self.ifc_path, width=40, is_file_path=True,
                                    help_text="Ścieżka do pliku modelu budynku w formacie IFC.")
 
-        self._create_labeled_entry(input_frame, "Szerokość geograficzna (Lat):", self.lat,
+        self._create_labeled_entry(input_frame, "Szerokość geograficzna (Lat):", self.lat, width=10,
                                    help_text="Szerokość geograficzna lokalizacji budynku w stopniach dziesiętnych. Używana do pobierania danych pogodowych.")
-        self._create_labeled_entry(input_frame, "Długość geograficzna (Lon):", self.lon,
+        self._create_labeled_entry(input_frame, "Długość geograficzna (Lon):", self.lon, width=10,
                                    help_text="Długość geograficzna lokalizacji budynku w stopniach dziesiętnych. Używana do pobierania danych pogodowych.")
-        self._create_labeled_entry(input_frame, "Wysokość n.p.m. [m] (Alt):", self.alt,
+        self._create_labeled_entry(input_frame, "Wysokość n.p.m. [m] (Alt):", self.alt, width=10,
                                    help_text="Wysokość nad poziomem morza lokalizacji budynku w metrach. Używana do pobierania danych pogodowych.")
 
-        self._create_labeled_entry(input_frame, "Wymiany powietrza [ACH]:", self.ach,
+        self._create_labeled_entry(input_frame, "Wymiany powietrza [ACH]:", self.ach, width=10,
                                    help_text="Współczynnik wymiany powietrza na godzinę. Reprezentuje infiltrację powietrza z zewnątrz i/lub wentylację. Jest to uproszczone założenie, które nie uwzględnia złożonych systemów wentylacji ani dynamicznych warunków infiltracji.")
 
         # Heating Temperature Widgets (dynamically controlled)
         self.heating_temp_frame = self._create_labeled_entry(input_frame, "Temperatura wewnętrzna (ogrzewanie) [°C]:",
-                                                             self.indoor_temp,
+                                                             self.indoor_temp, width=10,
                                                              help_text="Żądana temperatura wewnętrzna do obliczeń zapotrzebowania na ciepło. Stała wartość przyjęta dla wszystkich pomieszczeń.",
                                                              return_frame=True)
 
         # Cooling Temperature Widgets (dynamically controlled)
         self.cooling_temp_frame = self._create_labeled_entry(input_frame, "Temperatura wewnętrzna (chłodzenie) [°C]:",
-                                                             self.cooling_setpoint_temp,
+                                                             self.cooling_setpoint_temp, width=10,
                                                              help_text="Żądana temperatura wewnętrzna do obliczeń zapotrzebowania na chłód. Stała wartość przyjęta dla wszystkich pomieszczeń.",
                                                              return_frame=True)
 
-        # Cooling Specific Inputs (always shown, but apply only to cooling calculations)
-        self._create_labeled_entry(input_frame, "Domyślna liczba osób na przestrzeń:", self.occupancy_default_count,
-                                   help_text=f"Uproszczona liczba osób w każdej przestrzeni. Każda osoba generuje {HEAT_GAIN_PEOPLE_SENSIBLE} W ciepła jawnego.")
-        self._create_labeled_entry(input_frame, "Gęstość oświetlenia [W/m²]:", self.lighting_density_w_m2,
-                                   help_text="Średnia gęstość mocy oświetlenia w Watach na metr kwadratowy powierzchni podłogi. Jest to uproszczone założenie dla zysków ciepła wewnętrznego.")
-        self._create_labeled_entry(input_frame, "Gęstość urządzeń [W/m²]:", self.equipment_density_w_m2,
-                                   help_text="Średnia gęstość mocy urządzeń (np. komputerów, elektroniki) w Watach na metr kwadratowy powierzchni podłogi. Jest to uproszczone założenie dla zysków ciepła wewnętrznego.")
+        # Cooling Specific Inputs (dynamically controlled - will be hidden for heating)
+        self.occupancy_frame = self._create_labeled_entry(input_frame, "Domyślna liczba osób na przestrzeń:",
+                                                          self.occupancy_default_count, width=10,
+                                                          help_text=f"Uproszczona liczba osób w każdej przestrzeni. Każda osoba generuje {HEAT_GAIN_PEOPLE_SENSIBLE} W ciepła jawnego.",
+                                                          return_frame=True)
+        self.lighting_frame = self._create_labeled_entry(input_frame, "Gęstość oświetlenia [W/m²]:",
+                                                         self.lighting_density_w_m2, width=10,
+                                                         help_text="Średnia gęstość mocy oświetlenia w Watach na metr kwadratowy powierzchni podłogi. Jest to uproszczone założenie dla zysków ciepła wewnętrznego.",
+                                                         return_frame=True)
+        self.equipment_frame = self._create_labeled_entry(input_frame, "Gęstość urządzeń [W/m²]:",
+                                                          self.equipment_density_w_m2, width=10,
+                                                          help_text="Średnia gęstość mocy urządzeń (np. komputerów, elektroniki) w Watach na metr kwadratowy powierzchni podłogi. Jest to uproszczone założenie dla zysków ciepła wewnętrznego.",
+                                                          return_frame=True)
 
         # Analysis Options
-        analysis_frame = tk.Frame(self.master, padx=10, pady=5)
+        analysis_frame = tk.Frame(self.master, padx=5, pady=2)
         analysis_frame.pack(side=tk.TOP, fill=tk.X)
 
         # --- Analysis Mode Row ---
-        # Create a sub-frame for grouping Label, OptionMenu, and Help button
         mode_option_frame = tk.Frame(analysis_frame)
-        mode_option_frame.pack(fill=tk.X, pady=2, anchor="w")  # anchor="w" to align left
+        mode_option_frame.pack(fill=tk.X, pady=1, anchor="w")
         tk.Label(mode_option_frame, text="Tryb analizy:").pack(side=tk.LEFT, padx=5)
         mode_menu = tk.OptionMenu(mode_option_frame, self.analysis_mode, "Ogrzewanie", "Chłodzenie",
                                   command=self._on_analysis_option_change)
@@ -523,7 +527,7 @@ class HeatLossApp:
 
         # --- Analysis Period Row ---
         period_option_frame = tk.Frame(analysis_frame)
-        period_option_frame.pack(fill=tk.X, pady=2, anchor="w")  # anchor="w" to align left
+        period_option_frame.pack(fill=tk.X, pady=1, anchor="w")
         tk.Label(period_option_frame, text="Zakres czasowy:").pack(side=tk.LEFT, padx=5)
         period_menu = tk.OptionMenu(period_option_frame, self.analysis_period, "Roczny", "Dzienny",
                                     command=self._on_analysis_option_change)
@@ -532,31 +536,30 @@ class HeatLossApp:
                                    "Wybierz zakres czasowy analizy. **Roczna** analiza wykorzystuje średnie dobowe temperatury i daje zużycie kWh/dzień w ciągu roku. **Dzienna** analiza wykorzystuje godzinowe temperatury i promieniowanie słoneczne dla wybranej daty, przedstawiając moc [W] w ciągu dnia.")
 
         # Dynamic Analysis Input
-        dynamic_input_frame = tk.Frame(self.master, padx=10, pady=5)
+        dynamic_input_frame = tk.Frame(self.master, padx=5, pady=2)
         dynamic_input_frame.pack(side=tk.TOP, fill=tk.X)
 
         self.analysis_input_label = tk.Label(dynamic_input_frame, text="Wprowadź rok:")
         self.analysis_input_label.pack(side=tk.LEFT, padx=5)
-        self.analysis_input_entry = tk.Entry(dynamic_input_frame, textvariable=self.analysis_input_value, width=20)
+        self.analysis_input_entry = tk.Entry(dynamic_input_frame, textvariable=self.analysis_input_value, width=15)
         self.analysis_input_entry.pack(side=tk.LEFT, expand=True, fill=tk.X, padx=5)
         self.analysis_input_help_button = self._add_help_button_pack(dynamic_input_frame,
                                                                      "Wprowadź rok (np. 2023) dla analizy rocznej lub datę (np. 2023-01-15) dla analizy dziennej, zgodnie z wybranym trybem i zakresem.",
                                                                      return_button=True)
 
         # Buttons
-        button_frame = tk.Frame(self.master, pady=10)
+        button_frame = tk.Frame(self.master, pady=5)
         button_frame.pack(side=tk.TOP, fill=tk.X)
-        tk.Button(button_frame, text="Generuj wykresy", command=self._run_analysis).pack(pady=5)
+        tk.Button(button_frame, text="Generuj wykresy", command=self._run_analysis).pack(pady=2)
 
         # Status Message
         self.status_label = tk.Label(self.master, text="", fg="blue")
-        self.status_label.pack(side=tk.BOTTOM, fill=tk.X, padx=10, pady=5)
-        self.master.geometry("600x750")  # Adjust initial window size
+        self.status_label.pack(side=tk.BOTTOM, fill=tk.X, padx=5, pady=2)
 
     def _create_labeled_entry(self, parent_frame, label_text, textvariable, width=20, is_file_path=False, help_text="",
                               return_frame=False):
         frame = tk.Frame(parent_frame)
-        frame.pack(fill=tk.X, pady=2, padx=5)
+        frame.pack(fill=tk.X, pady=1, padx=5)
 
         label = tk.Label(frame, text=label_text)
         label.pack(side=tk.LEFT, anchor="w", padx=(0, 5))
@@ -565,16 +568,16 @@ class HeatLossApp:
         entry.pack(side=tk.LEFT, expand=True, fill=tk.X, padx=(0, 5))
 
         if is_file_path:
-            tk.Button(frame, text="Wybierz plik", command=self._browse_ifc).pack(side=tk.LEFT)
+            tk.Button(frame, text="Wybierz plik", command=self._browse_ifc).pack(side=tk.LEFT, padx=(0, 0))
 
         self._add_help_button_pack(frame, help_text)
 
-        if return_frame:  # New return for dynamic visibility
+        if return_frame:
             return frame
 
     def _add_help_button_pack(self, parent_widget, text, return_button=False):
         button = tk.Button(parent_widget, text="?", width=2, command=lambda: messagebox.showinfo("Pomoc", text))
-        button.pack(side=tk.LEFT, padx=(5, 0))  # Changed to side=tk.LEFT to keep it close
+        button.pack(side=tk.LEFT, padx=(5, 0))
         if return_button:
             return button
 
@@ -586,7 +589,7 @@ class HeatLossApp:
             self.ifc_path.set(file_path)
 
     def _on_analysis_option_change(self, *args):
-        # --- Update dynamic input label based on period ---
+        # Update dynamic input label based on period
         selected_period = self.analysis_period.get()
         if selected_period == "Roczny":
             self.analysis_input_label.config(text="Wprowadź rok (np. 2023):")
@@ -595,14 +598,26 @@ class HeatLossApp:
             self.analysis_input_label.config(text="Wprowadź datę (RRRR-MM-DD):")
             self.analysis_input_value.set("")
 
-        # --- Update temperature input visibility based on mode ---
+        # Update temperature and internal gains input visibility based on mode
         selected_mode = self.analysis_mode.get()
         if selected_mode == "Ogrzewanie":
-            self.heating_temp_frame.pack(fill=tk.X, pady=2, padx=5)  # Show heating temp
-            self.cooling_temp_frame.pack_forget()  # Hide cooling temp
+            self.heating_temp_frame.pack(fill=tk.X, pady=1, padx=5)
+            self.cooling_temp_frame.pack_forget()
+
+            # Hide fields related to internal gains for heating
+            self.occupancy_frame.pack_forget()
+            self.lighting_frame.pack_forget()
+            self.equipment_frame.pack_forget()
+
         elif selected_mode == "Chłodzenie":
-            self.heating_temp_frame.pack_forget()  # Hide heating temp
-            self.cooling_temp_frame.pack(fill=tk.X, pady=2, padx=5)  # Show cooling temp
+            self.heating_temp_frame.pack_forget()
+            self.cooling_temp_frame.pack(fill=tk.X, pady=1, padx=5)
+
+            # Show fields related to internal gains for cooling
+            # Re-pack them to ensure they appear in the correct order
+            self.occupancy_frame.pack(fill=tk.X, pady=1, padx=5)
+            self.lighting_frame.pack(fill=tk.X, pady=1, padx=5)
+            self.equipment_frame.pack(fill=tk.X, pady=1, padx=5)
 
     def _run_analysis(self):
         ifc_path = self.ifc_path.get()
@@ -645,8 +660,8 @@ class HeatLossApp:
                 if analysis_period == "Roczny":
                     try:
                         year = int(analysis_input)
-                        output_file = f'roczne_zuzycie_ogrzewanie_{year}.png'
-                        msg = plot_yearly_energy(building, lat, lon, alt, year, indoor_temp, ach, output_file)
+                        output_file = f'roczne_zapotrzebowanie_ogrzewanie_{year}.png'
+                        msg = plot_yearly_energy_heating(building, lat, lon, alt, year, indoor_temp, ach, output_file)
                         if msg:
                             self.status_label.config(text=msg, fg="green")
                         else:
@@ -661,8 +676,9 @@ class HeatLossApp:
                 elif analysis_period == "Dzienny":
                     try:
                         target_date = datetime.strptime(analysis_input, '%Y-%m-%d')
-                        output_file = f'hourly_loss_ogrzewanie_{target_date.strftime("%Y-%m-%d")}.png'
-                        msg = plot_daily_hourly(building, lat, lon, alt, target_date, indoor_temp, ach, output_file)
+                        output_file = f'godzinowe_zapotrzebowanie_ogrzewanie_{target_date.strftime("%Y-%m-%d")}.png'
+                        msg = plot_daily_hourly_heating(building, lat, lon, alt, target_date, indoor_temp, ach,
+                                                        output_file)
                         if msg:
                             self.status_label.config(text=msg, fg="green")
                         else:
@@ -675,11 +691,11 @@ class HeatLossApp:
                         self.status_label.config(text="Błąd podczas analizy dziennej ogrzewania.", fg="red")
 
             elif analysis_mode == "Chłodzenie":
-                indoor_temp = self.cooling_setpoint_temp.get()  # Use cooling setpoint temp
+                indoor_temp = self.cooling_setpoint_temp.get()
                 if analysis_period == "Roczny":
                     try:
                         year = int(analysis_input)
-                        output_file = f'roczne_obciazenie_chlodzenie_{year}.png'
+                        output_file = f'roczne_zapotrzebowanie_chlodzenie_{year}.png'
                         msg = plot_yearly_energy_cooling(building, lat, lon, alt, year, indoor_temp, ach,
                                                          occupancy_per_space, lighting_density, equipment_density,
                                                          output_file)
@@ -696,7 +712,7 @@ class HeatLossApp:
                 elif analysis_period == "Dzienny":
                     try:
                         target_date = datetime.strptime(analysis_input, '%Y-%m-%d')
-                        output_file = f'hourly_load_chlodzenie_{target_date.strftime("%Y-%m-%d")}.png'
+                        output_file = f'godzinowe_zapotrzebowanie_chlodzenie_{target_date.strftime("%Y-%m-%d")}.png'
                         msg = plot_daily_hourly_cooling(building, lat, lon, alt, target_date, indoor_temp, ach,
                                                         occupancy_per_space, lighting_density, equipment_density,
                                                         output_file)
